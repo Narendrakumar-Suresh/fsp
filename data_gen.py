@@ -28,8 +28,9 @@ CONDITIONS = ["diabetes_t2", "hypertension", "ckd", "heart_failure", "afib", "os
 rng = np.random.default_rng(42)
 
 
-def _assign_drugs(n_drugs: int, condition_flags: np.ndarray) -> list[str]:
-    """Pick drugs biased by conditions."""
+def _assign_drugs(n_drugs: int, condition_flags: np.ndarray,
+                  local_rng: np.random.Generator) -> list[str]:
+    """Pick drugs biased by conditions. Uses per-hospital RNG to avoid entanglement."""
     weights = np.ones(len(DRUGS))
     if condition_flags[0]:  # diabetes
         for d in ["metformin", "insulin", "glipizide"]:
@@ -47,7 +48,7 @@ def _assign_drugs(n_drugs: int, condition_flags: np.ndarray) -> list[str]:
         for d in ["warfarin", "clopidogrel", "digoxin", "metoprolol"]:
             weights[DRUGS.index(d)] += 3
     weights /= weights.sum()
-    chosen = rng.choice(DRUGS, size=n_drugs, replace=False, p=weights)
+    chosen = local_rng.choice(DRUGS, size=n_drugs, replace=False, p=weights)
     return list(chosen)
 
 
@@ -99,7 +100,7 @@ def generate_hospital(n_patients: int = 400, hospital_id: int = 0,
 
         # Drug regimen: 5-10 drugs (polypharmacy by definition)
         n_drugs = local_rng.integers(5, 11)
-        drugs = _assign_drugs(n_drugs, condition_flags)
+        drugs = _assign_drugs(n_drugs, condition_flags, local_rng)
         doses = [local_rng.choice([5, 10, 25, 50, 100, 250, 500, 1000]) for _ in drugs]
 
         # ADR probability + label
