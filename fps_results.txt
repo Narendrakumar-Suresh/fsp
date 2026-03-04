@@ -1,0 +1,255 @@
+╭───────────────────────────────────────────────── FPS Demo ─────────────────────────────────────────────────╮
+│ Federated Polypharmacy Safety (FPS)                                                                        │
+│ Privacy-preserving · Causal · Uncertainty-aware                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+───────────────────────────────── Step 1: Generating Synthetic Patient Data ──────────────────────────────────
+  ✓ Total patients: 1200
+  ✓ ADR rate:       45.5%
+  ✓ Feature dims:   26
+    Hospital 0: 400 patients, ADR rate 39.8%
+    Hospital 1: 400 patients, ADR rate 48.5%
+    Hospital 2: 400 patients, ADR rate 48.2%
+───────────────────────── Step 2: Causal Inference — Propensity Matching + T-Learner ─────────────────────────
+                    Per-Drug Causal Attribution (CATE)                    
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Drug           ┃ Status ┃ N Treated ┃ N Matched ┃ Mean CATE ┃ Std CATE ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━┩
+│ warfarin       │ ok     │       364 │       358 │   +0.0621 │   0.2541 │
+│ lisinopril     │ ok     │       546 │       463 │   -0.0080 │   0.1902 │
+│ spironolactone │ ok     │       557 │       452 │   +0.0546 │   0.1917 │
+│ aspirin        │ ok     │       201 │       201 │   +0.0167 │   0.3274 │
+│ digoxin        │ ok     │       574 │       424 │   +0.0639 │   0.2153 │
+└────────────────┴────────┴───────────┴───────────┴───────────┴──────────┘
+  ✓ Augmented dims: 31 (base 26 + 5 CATE)
+  ✓ StandardScaler applied — zero-mean, unit-variance
+─────────────────────────── Step 3: Baseline — Local-Only Training (No Federation) ───────────────────────────
+  Hospital 0: AUROC=0.8392  F1=0.7119  FPR=0.1250
+  Hospital 1: AUROC=0.8093  F1=0.7027  FPR=0.2195
+  Hospital 2: AUROC=0.8118  F1=0.7467  FPR=0.1951
+  Average local:  AUROC=0.8201  F1=0.7204  FPR=0.1799
+──────────── Step 4: Federated Learning — 20 rounds, 3 virtual hospital clients (custom FedProx) ─────────────
+  Round  1: AUROC=0.6462  F1=0.6104  FPR=0.4846  σ²_epi=0.00007  σ²_ale=0.24973
+  Round  2: AUROC=0.6959  F1=0.6352  FPR=0.3769  σ²_epi=0.00035  σ²_ale=0.24729
+  Round  3: AUROC=0.7243  F1=0.6607  FPR=0.3077  σ²_epi=0.00129  σ²_ale=0.23562
+  Round  4: AUROC=0.7406  F1=0.6579  FPR=0.3308  σ²_epi=0.00260  σ²_ale=0.21672
+  Round  5: AUROC=0.7594  F1=0.6638  FPR=0.3308  σ²_epi=0.00405  σ²_ale=0.20085
+  Round  6: AUROC=0.7805  F1=0.6937  FPR=0.2692  σ²_epi=0.00564  σ²_ale=0.18907
+  Round  7: AUROC=0.7946  F1=0.6996  FPR=0.2692  σ²_epi=0.00755  σ²_ale=0.17711
+  Round  8: AUROC=0.8099  F1=0.7085  FPR=0.2615  σ²_epi=0.01001  σ²_ale=0.16261
+  Round  9: AUROC=0.8166  F1=0.7143  FPR=0.2615  σ²_epi=0.01203  σ²_ale=0.15191
+  Round 10: AUROC=0.8222  F1=0.7064  FPR=0.2385  σ²_epi=0.01479  σ²_ale=0.14046
+  Round 11: AUROC=0.8281  F1=0.7467  FPR=0.2385  σ²_epi=0.01701  σ²_ale=0.12766
+  Round 12: AUROC=0.8355  F1=0.7411  FPR=0.2385  σ²_epi=0.01853  σ²_ale=0.11531
+  Round 13: AUROC=0.8336  F1=0.7281  FPR=0.2154  σ²_epi=0.02004  σ²_ale=0.10533
+  Round 14: AUROC=0.8420  F1=0.7511  FPR=0.2154  σ²_epi=0.02115  σ²_ale=0.09764
+  Round 15: AUROC=0.8413  F1=0.7397  FPR=0.2154  σ²_epi=0.02257  σ²_ale=0.08704
+  Round 16: AUROC=0.8483  F1=0.7364  FPR=0.2231  σ²_epi=0.02422  σ²_ale=0.08270
+  Round 17: AUROC=0.8466  F1=0.7387  FPR=0.2308  σ²_epi=0.02456  σ²_ale=0.07794
+  Round 18: AUROC=0.8473  F1=0.7315  FPR=0.2077  σ²_epi=0.02695  σ²_ale=0.07394
+  Round 19: AUROC=0.8455  F1=0.7373  FPR=0.2077  σ²_epi=0.02653  σ²_ale=0.06928
+  Round 20: AUROC=0.8480  F1=0.7407  FPR=0.2000  σ²_epi=0.02676  σ²_ale=0.06552
+───────────────────────────── Step 5: Final Results + Uncertainty Decomposition ──────────────────────────────
+
+╭─────────────────────────────────────────────── FPS Results ────────────────────────────────────────────────╮
+│ Final Round 20 — Global Federated Model                                                                    │
+│                                                                                                            │
+│   AUROC          : 0.8480                                                                                  │
+│   F1 Score       : 0.7407                                                                                  │
+│   False Pos Rate : 0.2000                                                                                  │
+│                                                                                                            │
+│ Uncertainty (MC Dropout, T=50 passes):                                                                     │
+│   σ²_epistemic   : 0.02676  (model ignorance)                                                              │
+│   σ²_aleatoric   : 0.06552  (data noise)                                                                   │
+│                                                                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+──────────────────────────── Step 6: Comparison — Local vs FL Round 1 vs FL Final ────────────────────────────
+                   FPS Proof-of-Concept Results                   
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+┃ Metric             ┃ Local Only ┃ FL Round 1 ┃ FL Final (Ours) ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+│ AUROC              │   0.8201   │   0.6462   │     0.8480      │
+│ F1 Score           │   0.7204   │   0.6104   │     0.7407      │
+│ False Pos Rate     │   0.1799   │   0.4846   │     0.2000      │
+│ σ² Epistemic       │   0.0256   │   0.0001   │     0.0268      │
+│ σ² Aleatoric       │   0.0824   │   0.2497   │     0.0655      │
+│ Privacy            │     No     │    Yes     │       Yes       │
+│ Causal CATE        │    Yes     │    Yes     │       Yes       │
+└────────────────────┴────────────┴────────────┴─────────────────┘
+
+  AUROC gain  (FL Final vs Local): +0.0279
+  FPR  drop   (FL Final vs Local): -0.0201
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ✓ Federated learning outperforms local-only training.                                                      │
+│ Privacy-preserving · Causal CATE features · MC Dropout uncertainty                                         │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+──────────────────────────── Step 7: Drug Attribution — Identifying Culprit Drugs ────────────────────────────
+  Running attribution on top high-risk patients (threshold >= 60% predicted ADR risk)...
+
+  ✓ Attribution complete for 5 high-risk patients
+
+╭────────────────────────────────────────── ADR Attribution Report ──────────────────────────────────────────╮
+│ Patient: H0_P0179                                                                                          │
+│ Drugs:  lisinopril, metformin, furosemide, omeprazole, hydrochlorothiazide, atorvastatin, spironolactone,  │
+│ colchicine, insulin, digoxin                                                                               │
+│                                                                                                            │
+│ Risk Score:  100%  CRITICAL                                                                                │
+│ σ²_epi:      0.00001  σ²_ale: 0.00147                                                                      │
+│                                                                                                            │
+│ ADR risk: 100% (CRITICAL) | Confidence: 99% | Dangerous synergy: OMEPRAZOLE + DIGOXIN (synergy score:      │
+│ +0.134)                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                Leave-One-Out Attribution                 
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+┃ Drug                ┃ Risk Δ (LOO) ┃ Shapley ┃ Role    ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+│ metformin           │      +0.0067 │ +0.0160 │ Neutral │
+│ spironolactone      │      +0.0032 │ +0.0201 │ Neutral │
+│ atorvastatin        │      +0.0027 │ +0.0021 │ Neutral │
+│ furosemide          │      +0.0006 │ +0.0158 │ Neutral │
+│ digoxin             │      +0.0004 │ -0.0156 │ Neutral │
+│ colchicine          │      -0.0000 │ +0.0165 │ Neutral │
+│ omeprazole          │      -0.0003 │ +0.0062 │ Neutral │
+│ insulin             │      -0.0005 │ -0.0068 │ Neutral │
+│ lisinopril          │      -0.0006 │ +0.0022 │ Neutral │
+│ hydrochlorothiazide │      -0.0006 │ +0.0106 │ Neutral │
+└─────────────────────┴──────────────┴─────────┴─────────┘
+                Top Drug Synergies / Interactions                
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Combination              ┃ Order ┃ Joint Risk ┃ Synergy Score ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ omeprazole + digoxin     │   2   │      0.989 │       +0.1344 │
+│ spironolactone + digoxin │   2   │      0.996 │       +0.1143 │
+│ colchicine + digoxin     │   2   │      0.992 │       +0.1142 │
+└──────────────────────────┴───────┴────────────┴───────────────┘
+╭────────────────────────────────────────── ADR Attribution Report ──────────────────────────────────────────╮
+│ Patient: H0_P0079                                                                                          │
+│ Drugs:  aspirin, metoprolol, metformin, furosemide, warfarin, insulin, digoxin, hydrochlorothiazide,       │
+│ allopurinol, glipizide                                                                                     │
+│                                                                                                            │
+│ Risk Score:  99%  CRITICAL                                                                                 │
+│ σ²_epi:      0.00002  σ²_ale: 0.00545                                                                      │
+│                                                                                                            │
+│ ADR risk: 99% (CRITICAL) | Confidence: 99% | Dangerous synergy: METOPROLOL + GLIPIZIDE (synergy score:     │
+│ +0.324)                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                Leave-One-Out Attribution                 
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+┃ Drug                ┃ Risk Δ (LOO) ┃ Shapley ┃ Role    ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+│ digoxin             │      +0.0104 │ +0.0790 │ Neutral │
+│ warfarin            │      +0.0073 │ +0.0550 │ Neutral │
+│ furosemide          │      +0.0070 │ +0.0745 │ Neutral │
+│ allopurinol         │      +0.0007 │ +0.0019 │ Neutral │
+│ metformin           │      -0.0000 │ +0.0191 │ Neutral │
+│ hydrochlorothiazide │      -0.0005 │ -0.0190 │ Neutral │
+│ insulin             │      -0.0006 │ -0.0045 │ Neutral │
+│ aspirin             │      -0.0013 │ +0.0245 │ Neutral │
+│ glipizide           │      -0.0017 │ -0.0492 │ Neutral │
+│ metoprolol          │      -0.0032 │ -0.0541 │ Neutral │
+└─────────────────────┴──────────────┴─────────┴─────────┘
+               Top Drug Synergies / Interactions                
+┏━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Combination             ┃ Order ┃ Joint Risk ┃ Synergy Score ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ metoprolol + glipizide  │   2   │      0.713 │       +0.3236 │
+│ aspirin + metoprolol    │   2   │      0.913 │       +0.3194 │
+│ metoprolol + furosemide │   2   │      0.963 │       +0.2695 │
+└─────────────────────────┴───────┴────────────┴───────────────┘
+╭────────────────────────────────────────── ADR Attribution Report ──────────────────────────────────────────╮
+│ Patient: H1_P0196                                                                                          │
+│ Drugs:  spironolactone, aspirin, omeprazole, metformin, glipizide, hydrochlorothiazide, metoprolol,        │
+│ digoxin, furosemide, clopidogrel                                                                           │
+│                                                                                                            │
+│ Risk Score:  99%  CRITICAL                                                                                 │
+│ σ²_epi:      0.00002  σ²_ale: 0.00561                                                                      │
+│                                                                                                            │
+│ ADR risk: 99% (CRITICAL) | Confidence: 99% | Dangerous synergy: DIGOXIN + FUROSEMIDE (synergy score:       │
+│ +0.350)                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                Leave-One-Out Attribution                 
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+┃ Drug                ┃ Risk Δ (LOO) ┃ Shapley ┃ Role    ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+│ clopidogrel         │      +0.0163 │ +0.0505 │ Neutral │
+│ hydrochlorothiazide │      +0.0152 │ +0.0832 │ Neutral │
+│ metformin           │      +0.0046 │ +0.0440 │ Neutral │
+│ glipizide           │      +0.0032 │ +0.0206 │ Neutral │
+│ furosemide          │      +0.0028 │ +0.0308 │ Neutral │
+│ aspirin             │      +0.0024 │ -0.0005 │ Neutral │
+│ spironolactone      │      +0.0021 │ +0.0698 │ Neutral │
+│ omeprazole          │      +0.0006 │ +0.0779 │ Neutral │
+│ digoxin             │      -0.0009 │ -0.0539 │ Neutral │
+│ metoprolol          │      -0.0023 │ -0.0396 │ Neutral │
+└─────────────────────┴──────────────┴─────────┴─────────┘
+              Top Drug Synergies / Interactions              
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Combination          ┃ Order ┃ Joint Risk ┃ Synergy Score ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ digoxin + furosemide │   2   │      0.902 │       +0.3497 │
+│ glipizide + digoxin  │   2   │      0.817 │       +0.3457 │
+│ aspirin + glipizide  │   2   │      0.883 │       +0.3278 │
+└──────────────────────┴───────┴────────────┴───────────────┘
+╭────────────────────────────────────────── ADR Attribution Report ──────────────────────────────────────────╮
+│ Patient: H0_P0167                                                                                          │
+│ Drugs:  metoprolol, digoxin, insulin, allopurinol, furosemide, aspirin, metformin, hydrochlorothiazide     │
+│                                                                                                            │
+│ Risk Score:  99%  CRITICAL                                                                                 │
+│ σ²_epi:      0.00007  σ²_ale: 0.00719                                                                      │
+│                                                                                                            │
+│ ADR risk: 99% (CRITICAL) | Confidence: 99% | Primary driver: DIGOXIN (removing it reduces risk by +9%) |   │
+│ Dangerous synergy: METOPROLOL + FUROSEMIDE (synergy score: +0.259)                                         │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                Leave-One-Out Attribution                 
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+┃ Drug                ┃ Risk Δ (LOO) ┃ Shapley ┃ Role    ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+│ digoxin             │      +0.0868 │ +0.0787 │ ↑ Risk  │
+│ furosemide          │      +0.0157 │ +0.1276 │ Neutral │
+│ aspirin             │      +0.0079 │ +0.1066 │ Neutral │
+│ insulin             │      +0.0071 │ +0.0316 │ Neutral │
+│ allopurinol         │      +0.0058 │ +0.0741 │ Neutral │
+│ hydrochlorothiazide │      +0.0029 │ +0.0179 │ Neutral │
+│ metformin           │      +0.0024 │ +0.0131 │ Neutral │
+│ metoprolol          │      -0.0036 │ -0.1574 │ Neutral │
+└─────────────────────┴──────────────┴─────────┴─────────┘
+                   Top Drug Synergies / Interactions                    
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Combination                     ┃ Order ┃ Joint Risk ┃ Synergy Score ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ metoprolol + furosemide         │   2   │      0.897 │       +0.2588 │
+│ metformin + hydrochlorothiazide │   2   │      0.962 │       +0.1337 │
+│ insulin + metformin             │   2   │      0.785 │       +0.1154 │
+└─────────────────────────────────┴───────┴────────────┴───────────────┘
+╭────────────────────────────────────────── ADR Attribution Report ──────────────────────────────────────────╮
+│ Patient: H1_P0017                                                                                          │
+│ Drugs:  digoxin, metformin, omeprazole, glipizide, furosemide, spironolactone, hydrochlorothiazide,        │
+│ metoprolol                                                                                                 │
+│                                                                                                            │
+│ Risk Score:  99%  CRITICAL                                                                                 │
+│ σ²_epi:      0.00012  σ²_ale: 0.00741                                                                      │
+│                                                                                                            │
+│ ADR risk: 99% (CRITICAL) | Confidence: 98% | Dangerous synergy: DIGOXIN + SPIRONOLACTONE (synergy score:   │
+│ +0.207)                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                Leave-One-Out Attribution                 
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+┃ Drug                ┃ Risk Δ (LOO) ┃ Shapley ┃ Role    ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+│ spironolactone      │      +0.0160 │ +0.0430 │ Neutral │
+│ hydrochlorothiazide │      +0.0043 │ +0.0200 │ Neutral │
+│ furosemide          │      +0.0040 │ -0.0054 │ Neutral │
+│ omeprazole          │      +0.0032 │ +0.0231 │ Neutral │
+│ metoprolol          │      +0.0021 │ -0.0034 │ Neutral │
+│ metformin           │      +0.0018 │ +0.0200 │ Neutral │
+│ glipizide           │      -0.0027 │ +0.0042 │ Neutral │
+│ digoxin             │      -0.0047 │ -0.0731 │ Neutral │
+└─────────────────────┴──────────────┴─────────┴─────────┘
+                Top Drug Synergies / Interactions                
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Combination              ┃ Order ┃ Joint Risk ┃ Synergy Score ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ digoxin + spironolactone │   2   │      0.935 │       +0.2067 │
+│ digoxin + omeprazole     │   2   │      0.915 │       +0.1934 │
+│ digoxin + furosemide     │   2   │      0.874 │       +0.1843 │
+└──────────────────────────┴───────┴────────────┴───────────────┘
