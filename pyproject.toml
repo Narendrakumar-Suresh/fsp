@@ -1,0 +1,9 @@
+[project]
+name = "fps"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "flwr[simulation]>=1.26.1",
+]
