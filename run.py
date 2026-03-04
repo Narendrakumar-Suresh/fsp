@@ -61,6 +61,7 @@ def step1_generate():
 def step2_causal(df_all, X_all, y_all, shards):
     console.rule("[bold cyan]Step 2: Causal Inference — Propensity Matching + T-Learner")
     from causal import run_causal_pipeline
+    from sklearn.preprocessing import StandardScaler
 
     # Use clinical features only (not drug flags) as confounders
     X_confounders = X_all[:, :6]   # age, n_conditions, n_drugs, creatinine, hba1c, potassium
@@ -89,16 +90,22 @@ def step2_causal(df_all, X_all, y_all, shards):
     # Augment features with CATE for all shards
     X_all_aug = np.hstack([X_all, cate_features])
 
+    # ── Normalize: fit scaler on combined dataset, apply to every shard ───
+    scaler = StandardScaler()
+    scaler.fit(X_all_aug)
+    X_all_aug_scaled = scaler.transform(X_all_aug)
+
     aug_shards = []
     for hid in range(3):
         df_h, X_h, y_h = shards[hid]
         mask = df_all["hospital_id"] == hid
         cate_h = cate_features[mask.values]
-        X_h_aug = np.hstack([X_h, cate_h])
-        aug_shards.append((df_h, X_h_aug, y_h))
+        X_h_aug_scaled = scaler.transform(np.hstack([X_h, cate_h]))
+        aug_shards.append((df_h, X_h_aug_scaled, y_h))
 
     console.print(f"  [green]✓[/] Augmented feature dims: {X_all_aug.shape[1]} (base 26 + 5 CATE)")
-    return X_all_aug, aug_shards, cate_features
+    console.print(f"  [green]✓[/] Features normalized: StandardScaler (zero-mean, unit-var)")
+    return X_all_aug_scaled, aug_shards, cate_features
 
 
 # ── Step 3: Baseline — Local-Only Training (no federation) ──────────────────
@@ -124,7 +131,7 @@ def step3_local_baseline(aug_shards):
 
 # ── Step 4: Federated Learning ───────────────────────────────────────────────
 
-def step4_federated(aug_shards, fl_rounds: int = 8):
+def step4_federated(aug_shards, fl_rounds: int = 20):
     console.rule(f"[bold cyan]Step 4: Federated Learning — {fl_rounds} rounds, 3 virtual hospital clients")
     from model import ADRNet, evaluate, get_weights, set_weights
     from fl_client import FPSClient
@@ -164,14 +171,15 @@ def step4_federated(aug_shards, fl_rounds: int = 8):
         )
         return float(1.0 - metrics["auroc"]), metrics
 
-    strategy = fl.server.strategy.FedAvg(
+    strategy = fl.server.strategy.FedProx(
+        proximal_mu=0.1,
         fraction_fit=1.0,
         fraction_evaluate=1.0,
         min_fit_clients=3,
         min_evaluate_clients=3,
         min_available_clients=3,
         evaluate_fn=evaluate_fn,
-        on_fit_config_fn=lambda r: {"epochs": 5},
+        on_fit_config_fn=lambda r: {"epochs": 2},
     )
 
     fl.simulation.start_simulation(
@@ -282,6 +290,6 @@ if __name__ == "__main__":
     df_all, X_all, y_all, shards      = step1_generate()
     X_all_aug, aug_shards, cate_feats  = step2_causal(df_all, X_all, y_all, shards)
     local_avg                          = step3_local_baseline(aug_shards)
-    round_metrics                      = step4_federated(aug_shards, fl_rounds=8)
+    round_metrics                      = step4_federated(aug_shards, fl_rounds=20)
     fl_round1, fl_final                = step5_final_evaluation(aug_shards, round_metrics)
     step6_comparison(local_avg, fl_round1, fl_final)
