@@ -141,12 +141,15 @@ def step3_local_baseline(aug_shards):
         local_metrics.append(metrics)
         console.print(
             f"  Hospital {hid}: AUROC={metrics['auroc']:.4f}  "
-            f"F1={metrics['f1']:.4f}  FPR={metrics['fpr']:.4f}")
+            f"AUPRC={metrics['auprc']:.4f}  "
+            f"F1={metrics['f1']:.4f}  FPR={metrics['fpr']:.4f}  "
+            f"ECE={metrics['ece']:.4f}")
 
     avg = {k: round(np.mean([m[k] for m in local_metrics]), 4) for k in local_metrics[0]}
     console.print(
         f"  [yellow]Average local:[/]  AUROC={avg['auroc']:.4f}  "
-        f"F1={avg['f1']:.4f}  FPR={avg['fpr']:.4f}")
+        f"AUPRC={avg['auprc']:.4f}  F1={avg['f1']:.4f}  "
+        f"FPR={avg['fpr']:.4f}  ECE={avg['ece']:.4f}")
     return avg
 
 
@@ -174,9 +177,12 @@ def step4_federated(aug_shards, fl_rounds: int = 20):
         metrics = evaluate(global_model, X_te_all, y_te_all)
         console.print(
             f"  Round {rnd:2d}: AUROC={metrics['auroc']:.4f}  "
+            f"AUPRC={metrics['auprc']:.4f}  "
             f"F1={metrics['f1']:.4f}  FPR={metrics['fpr']:.4f}  "
+            f"ECE={metrics['ece']:.4f}  "
             f"σ²_epi={metrics['mean_epistemic']:.5f}  "
-            f"σ²_ale={metrics['mean_aleatoric']:.5f}")
+            f"σ²_ale={metrics['mean_aleatoric']:.5f}"
+        )
         return metrics
 
     round_metrics, global_model = run_federated(
@@ -191,28 +197,77 @@ def step4_federated(aug_shards, fl_rounds: int = 20):
     return round_metrics, global_model
 
 
-# ── Step 5: Final Evaluation ─────────────────────────────────────────────────
+# ── Step 5: Temperature Calibration + Final Evaluation ──────────────────────
 
-def step5_final_evaluation(aug_shards, round_metrics):
-    console.rule("[bold cyan]Step 5: Final Results + Uncertainty Decomposition")
+def step5_final_evaluation(aug_shards, round_metrics, global_model):
+    console.rule("[bold cyan]Step 5: Temperature Calibration + Final Results")
+    from model import evaluate, fit_temperature
 
     final_round, final_metrics = round_metrics[-1]
     first_round, first_metrics = round_metrics[0]
 
+    # Build cal/test splits from aug_shards (same seed = same splits as FL)
+    splits = []
+    for df_h, X_h, y_h in aug_shards:
+        X_tr, X_te, y_tr, y_te = train_test_split(
+            X_h, y_h, test_size=0.2, random_state=42, stratify=y_h)
+        splits.append((X_tr, y_tr, X_te, y_te))
+
+    X_te_all = np.vstack([s[2] for s in splits])
+    y_te_all = np.concatenate([s[3] for s in splits])
+
+    # ── Calibration: carve 50% of test set as cal set, keep 50% for reporting
+    # In a real system you'd use a dedicated held-out set; here we split the
+    # existing test set to keep the pipeline self-contained.
+    from sklearn.model_selection import train_test_split as tts
+    X_cal, X_rep, y_cal, y_rep = tts(
+        X_te_all, y_te_all, test_size=0.5, random_state=0, stratify=y_te_all)
+
+    # Fit temperature on cal split
+    T_star = fit_temperature(global_model, X_cal, y_cal, n_passes=20)
+
+    # Evaluate on reporting split — uncalibrated vs calibrated
+    metrics_raw  = evaluate(global_model, X_rep, y_rep, temperature=1.0)
+    metrics_cal  = evaluate(global_model, X_rep, y_rep, temperature=T_star)
+
+    console.print()
+    console.print(
+        f"  [bold]Temperature scaling:[/bold]  "
+        f"T* = [yellow]{T_star:.4f}[/yellow]  "
+        f"({'softening overconfident predictions' if T_star > 1 else 'sharpening underconfident predictions'})"
+    )
+    console.print(
+        f"  ECE before calibration : [red]{metrics_raw['ece']:.4f}[/red]  →  "
+        f"ECE after calibration  : [green]{metrics_cal['ece']:.4f}[/green]"
+    )
+    console.print(
+        f"  AUROC unchanged        : {metrics_raw['auroc']:.4f}  →  {metrics_cal['auroc']:.4f}  "
+        f"[dim](rank-preserving ✓)[/dim]"
+    )
+
+    auroc_color = "green" if metrics_cal["auroc"] >= 0.70 else \
+                  "yellow" if metrics_cal["auroc"] >= 0.60 else "red"
+    ece_color   = "green" if metrics_cal["ece"] <= 0.05 else \
+                  "yellow" if metrics_cal["ece"] <= 0.10 else "red"
+
     console.print()
     console.print(Panel(
-        f"[bold]Final Round {final_round} — Global Federated Model[/bold]\n\n"
-        f"  AUROC          : [green]{final_metrics['auroc']:.4f}[/green]\n"
-        f"  F1 Score       : [green]{final_metrics['f1']:.4f}[/green]\n"
-        f"  False Pos Rate : [green]{final_metrics['fpr']:.4f}[/green]\n\n"
+        f"[bold]Final Round {final_round} — Global Federated Model (calibrated)[/bold]\n\n"
+        f"  AUROC          : [{auroc_color}]{metrics_cal['auroc']:.4f}[/{auroc_color}]\n"
+        f"  AUPRC          : [green]{metrics_cal['auprc']:.4f}[/green]\n"
+        f"  F1 Score       : [green]{metrics_cal['f1']:.4f}[/green]\n"
+        f"  False Pos Rate : [green]{metrics_cal['fpr']:.4f}[/green]\n"
+        f"  Calib. ECE     : [{ece_color}]{metrics_cal['ece']:.4f}[/{ece_color}]"
+        f"  [dim](T*={T_star:.3f})[/dim]\n\n"
         f"[bold]Uncertainty (MC Dropout, T=50 passes):[/bold]\n"
-        f"  σ²_epistemic   : {final_metrics['mean_epistemic']:.5f}  (model ignorance)\n"
-        f"  σ²_aleatoric   : {final_metrics['mean_aleatoric']:.5f}  (data noise)\n",
+        f"  σ²_epistemic   : {metrics_cal['mean_epistemic']:.5f}  (model ignorance)\n"
+        f"  σ²_aleatoric   : {metrics_cal['mean_aleatoric']:.5f}  (data noise)\n",
         title="[bold cyan]FPS Results",
         border_style="cyan"
     ))
 
-    return first_metrics, final_metrics
+    # Return calibrated metrics + T* for downstream use
+    return first_metrics, metrics_cal, T_star
 
 
 # ── Step 6: Comparison Table ─────────────────────────────────────────────────
@@ -231,10 +286,14 @@ def step6_comparison(local_avg, fl_round1, fl_final):
 
     t.add_row("AUROC",
               fmt(local_avg['auroc']),    fmt(fl_round1['auroc']),    fmt(fl_final['auroc']))
+    t.add_row("AUPRC",
+              fmt(local_avg['auprc']),    fmt(fl_round1['auprc']),    fmt(fl_final['auprc']))
     t.add_row("F1 Score",
               fmt(local_avg['f1']),       fmt(fl_round1['f1']),       fmt(fl_final['f1']))
     t.add_row("False Pos Rate",
               fmt(local_avg['fpr']),      fmt(fl_round1['fpr']),      fmt(fl_final['fpr']))
+    t.add_row("Calib. ECE",
+              fmt(local_avg['ece']),      fmt(fl_round1['ece']),      fmt(fl_final['ece']))
     t.add_row("σ² Epistemic",
               fmt(local_avg['mean_epistemic']),
               fmt(fl_round1['mean_epistemic']),
@@ -278,7 +337,7 @@ def step6_comparison(local_avg, fl_round1, fl_final):
 
 # ── Step 7: Drug Attribution ─────────────────────────────────────────────────
 
-def step7_attribution(aug_shards, df_all, global_model):
+def step7_attribution(aug_shards, df_all, global_model, temperature: float = 1.0):
     console.rule("[bold cyan]Step 7: Drug Attribution — Identifying Culprit Drugs")
     from attribution import batch_attribute, print_attribution_report
 
@@ -299,17 +358,19 @@ def step7_attribution(aug_shards, df_all, global_model):
     df_test = pd.concat(df_test_parts, ignore_index=True)
 
     console.print("  Running attribution on top high-risk patients "
-                  "(threshold >= 60% predicted ADR risk)...")
+                  f"(threshold >= 60%, temperature T*={temperature:.3f})...")
 
     reports = batch_attribute(
         model=global_model, X=X_te_all, df=df_test,
-        top_n=5, risk_threshold=0.60, n_mc_passes=15)
+        top_n=5, risk_threshold=0.60, n_mc_passes=15,
+        temperature=temperature)
 
     if not reports:
         console.print("  [yellow]No patients above 60% — lowering threshold to 40%[/]")
         reports = batch_attribute(
             global_model, X_te_all, df_test,
-            top_n=5, risk_threshold=0.40, n_mc_passes=15)
+            top_n=5, risk_threshold=0.40, n_mc_passes=15,
+            temperature=temperature)
 
     console.print(f"\n  [green]✓[/] Attribution complete for {len(reports)} high-risk patients\n")
     for report in reports:
@@ -323,16 +384,17 @@ def step7_attribution(aug_shards, df_all, global_model):
 if __name__ == "__main__":
     console.print(Panel(
         "[bold]Federated Polypharmacy Safety (FPS)[/bold]\n"
-        "Privacy-preserving · Causal · Uncertainty-aware",
+        "Privacy-preserving · Causal · Uncertainty-aware · Temperature Calibrated",
         title="FPS Demo", border_style="blue"))
 
     df_all, X_all, y_all, shards          = step1_generate()
     X_all_aug, aug_shards, cate_feats, sc  = step2_causal(df_all, X_all, y_all, shards)
     local_avg                              = step3_local_baseline(aug_shards)
     round_metrics, global_model            = step4_federated(aug_shards, fl_rounds=20)
-    fl_round1, fl_final                    = step5_final_evaluation(aug_shards, round_metrics)
+    fl_round1, fl_final, T_star            = step5_final_evaluation(
+                                                aug_shards, round_metrics, global_model)
     step6_comparison(local_avg, fl_round1, fl_final)
-    step7_attribution(aug_shards, df_all, global_model)
+    step7_attribution(aug_shards, df_all, global_model, temperature=T_star)
 
     _file_handle.flush()
     _file_handle.close()

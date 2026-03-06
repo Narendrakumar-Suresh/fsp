@@ -74,22 +74,15 @@ def _score_with_drugs(model: ADRNet,
                        base_x: np.ndarray,
                        active_drug_indices: list[int],
                        drug_offset: int = 6,
-                       n_passes: int = 20) -> dict:
-    """
-    Given a base feature vector, zero out all drugs except active_drug_indices
-    and get the model's risk prediction.
-
-    drug_offset: index in feature vector where drug one-hots begin (= 6 for
-                 our 6 clinical features before the 20 drug OHE columns)
-    """
+                       n_passes: int = 20,
+                       temperature: float = 1.0) -> dict:
     x = base_x.copy()
-    # Zero out all drug OHE features
     x[drug_offset: drug_offset + len(DRUGS)] = 0.0
-    # Set active drugs to 1 (in the normalized space, OHE=1 → ~0.7 std units)
     for idx in active_drug_indices:
         x[drug_offset + idx] = 1.0
 
-    result = mc_predict(model, x.reshape(1, -1), n_passes=n_passes)
+    result = mc_predict(model, x.reshape(1, -1), n_passes=n_passes,
+                        temperature=temperature)
     return {
         "risk":       float(result["risk_score"][0]),
         "epistemic":  float(result["epistemic"][0]),
@@ -102,7 +95,8 @@ def _score_with_drugs(model: ADRNet,
 def leave_one_out(model: ADRNet,
                    patient: PatientRecord,
                    drug_offset: int = 6,
-                   n_passes: int = 20) -> dict:
+                   n_passes: int = 20,
+                   temperature: float = 1.0) -> dict:
     """
     For each drug in the patient's regimen, compute:
       delta_i = risk(full regimen) - risk(regimen without drug_i)
@@ -111,14 +105,16 @@ def leave_one_out(model: ADRNet,
     Negative delta = this drug is actually protective in context.
     """
     full = _score_with_drugs(model, patient.feature_vector,
-                              patient.drug_indices, drug_offset, n_passes)
+                              patient.drug_indices, drug_offset, n_passes,
+                              temperature=temperature)
     full_risk = full["risk"]
 
     attributions = {}
     for i, (idx, name) in enumerate(zip(patient.drug_indices, patient.drug_names)):
         reduced = [d for j, d in enumerate(patient.drug_indices) if j != i]
         reduced_score = _score_with_drugs(
-            model, patient.feature_vector, reduced, drug_offset, n_passes
+            model, patient.feature_vector, reduced, drug_offset, n_passes,
+            temperature=temperature
         )
         attributions[name] = round(full_risk - reduced_score["risk"], 4)
 
@@ -133,7 +129,8 @@ def shapley_values(model: ADRNet,
                     drug_offset: int = 6,
                     n_passes: int = 10,
                     max_exact_n: int = 10,
-                    n_samples: int = 256) -> dict:
+                    n_samples: int = 256,
+                    temperature: float = 1.0) -> dict:
     """
     Compute Shapley values for each drug.
 
@@ -154,7 +151,8 @@ def shapley_values(model: ADRNet,
         if subset_tuple in _cache:
             return _cache[subset_tuple]
         result = _score_with_drugs(model, patient.feature_vector,
-                                    list(subset_tuple), drug_offset, n_passes)
+                                    list(subset_tuple), drug_offset, n_passes,
+                                    temperature=temperature)
         _cache[subset_tuple] = result["risk"]
         return result["risk"]
 
@@ -206,7 +204,8 @@ def detect_synergies(model: ADRNet,
                       patient: PatientRecord,
                       drug_offset: int = 6,
                       n_passes: int = 10,
-                      top_k: int = 3) -> list[dict]:
+                      top_k: int = 3,
+                      temperature: float = 1.0) -> list[dict]:
     """
     Detect pairwise and triple synergies: combinations where the joint
     effect exceeds the sum of individual effects.
@@ -218,8 +217,7 @@ def detect_synergies(model: ADRNet,
     names = patient.drug_names
     N = len(drugs)
 
-    baseline = _score_with_drugs(model, patient.feature_vector,
-                                  [], drug_offset, n_passes)["risk"]
+    baseline = _score_with_drugs(model, patient.feature_vector, [], drug_offset, n_passes, temperature=temperature)["risk"]
 
     individual = {}
     for idx, name in zip(drugs, names):
@@ -278,7 +276,8 @@ def attribute_patient(model: ADRNet,
                        patient: PatientRecord,
                        drug_offset: int = 6,
                        use_shapley: bool = True,
-                       n_mc_passes: int = 20) -> dict:
+                       n_mc_passes: int = 20,
+                       temperature: float = 1.0) -> dict:
     """
     Run full attribution pipeline for one patient and return a structured report.
 
@@ -291,7 +290,8 @@ def attribute_patient(model: ADRNet,
       - alert_level: "LOW" / "MODERATE" / "HIGH" / "CRITICAL"
       - explanation: human-readable string
     """
-    loo_result  = leave_one_out(model, patient, drug_offset, n_mc_passes)
+    loo_result  = leave_one_out(model, patient, drug_offset, n_mc_passes,
+                                temperature=temperature)
     loo_attr    = loo_result["loo"]
     full_risk   = loo_result["full_risk"]
     epistemic   = loo_result["epistemic"]
@@ -300,10 +300,12 @@ def attribute_patient(model: ADRNet,
     shap_attr = {}
     if use_shapley and len(patient.drug_names) <= 12:
         shap_attr = shapley_values(model, patient, drug_offset,
-                                    n_passes=max(5, n_mc_passes // 4))
+                                    n_passes=max(5, n_mc_passes // 4),
+                                    temperature=temperature)
 
     synergies = detect_synergies(model, patient, drug_offset,
-                                  n_passes=max(5, n_mc_passes // 4))
+                                  n_passes=max(5, n_mc_passes // 4),
+                                  temperature=temperature)
 
     # ── Determine top culprit ─────────────────────────────────────────────
     top_culprit = max(loo_attr, key=loo_attr.get) if loo_attr else None
@@ -381,15 +383,18 @@ def batch_attribute(model: ADRNet,
                      scaler=None,
                      top_n: int = 10,
                      risk_threshold: float = 0.60,
-                     n_mc_passes: int = 20) -> list[dict]:
+                     n_mc_passes: int = 20,
+                     temperature: float = 1.0) -> list[dict]:
     """
     Run attribution for the top_n highest-risk patients above risk_threshold.
     Returns list of attribution reports sorted by risk score descending.
+    temperature: calibration scalar from fit_temperature() — applied to all
+                 mc_predict calls within attribution.
     """
     from model import mc_predict
 
     # First pass: get risk scores for all patients cheaply (5 passes)
-    all_results = mc_predict(model, X, n_passes=5)
+    all_results = mc_predict(model, X, n_passes=5, temperature=temperature)
     risk_scores = all_results["risk_score"]
 
     # Pick top_n above threshold
@@ -413,7 +418,8 @@ def batch_attribute(model: ADRNet,
             drug_names=drug_names,
         )
         report = attribute_patient(model, patient,
-                                    n_mc_passes=n_mc_passes)
+                                    n_mc_passes=n_mc_passes,
+                                    temperature=temperature)
         reports.append(report)
 
     return reports
