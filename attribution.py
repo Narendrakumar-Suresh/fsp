@@ -1,40 +1,4 @@
-"""
-attribution.py — Drug attribution within a polypharmacy combination
-=================================================================
-Answers the question:
-  "For THIS patient on {warfarin, digoxin, furosemide, aspirin, lisinopril},
-   WHICH drug (or pair) is responsible for the predicted ADR?"
 
-Two complementary methods:
-  1. Leave-One-Out (LOO) Counterfactuals
-     Remove each drug in turn and measure risk delta.
-     Fast, interpretable, clinically meaningful.
-
-  2. Shapley Values (cooperative game theory)
-     Each drug is a "player". Its Shapley value = average marginal
-     contribution across all possible drug orderings/subsets.
-     Theoretically sound (satisfies efficiency, symmetry, dummy properties).
-     O(2^N) exact or O(T*N) via Monte Carlo sampling.
-
-  3. Synergy Detection
-     Pairwise / triple interaction: does the pair {A,B} cause more harm
-     than the sum of individual effects? Detects non-linear combinations.
-
-Output per patient:
-  {
-    "drugs":          ["warfarin", "aspirin", "digoxin", ...],
-    "risk_score":     0.83,
-    "epistemic":      0.012,
-    "aleatoric":      0.21,
-    "loo_attributions": {"warfarin": +0.31, "aspirin": +0.18, ...},
-    "shapley_values":   {"warfarin": +0.29, "aspirin": +0.15, ...},
-    "top_culprit":      "warfarin",
-    "top_pair":         ("warfarin", "aspirin"),
-    "synergy_score":    0.24,  # risk(pair) - risk(A alone) - risk(B alone)
-    "alert_level":      "HIGH",
-    "explanation":      "Warfarin is the primary driver (+0.31 risk increase). ..."
-  }
-"""
 
 import itertools
 import numpy as np

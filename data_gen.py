@@ -1,7 +1,4 @@
-"""
-data_gen.py — Synthetic chronic-disease polypharmacy patient generator
-Produces realistic-ish medication histories + ADR labels for 3 hospital shards.
-"""
+
 
 import numpy as np
 import pandas as pd

@@ -1,9 +1,4 @@
-"""
-causal.py — Causal inference pipeline
-  1. Propensity Score Matching to de-bias ADR labels per drug
-  2. T-Learner for CATE estimation (per-drug treatment effect)
-  3. Returns CATE features to augment the risk model input
-"""
+
 
 import numpy as np
 import pandas as pd

@@ -1,25 +1,4 @@
-"""
-model.py — Multi-task ADR risk prediction network with Monte Carlo Dropout
-  - Input:  feature vector (26 dims from data_gen + optional CATE features)
-  - Output: ADR probability (sigmoid) + severity score (linear)
-  - Uncertainty: 50 MC Dropout forward passes → aleatoric + epistemic decomposition
-  - Calibration: post-hoc temperature scaling (Guo et al. 2017)
 
-Temperature scaling:
-  The model tends to become overconfident as FL rounds increase — it assigns
-  high-confidence predictions that exceed true accuracy. Temperature scaling
-  fixes this without touching model weights: a single scalar T (learned on a
-  held-out calibration split) divides logits before sigmoid.
-
-    p_cal = sigmoid(logit / T)
-
-  T > 1  →  softens overconfident predictions toward 0.5  (our case)
-  T < 1  →  sharpens underconfident predictions
-  T = 1  →  no change (identity)
-
-  Crucially, temperature scaling is rank-preserving, so AUROC and F1 are
-  completely unaffected — only ECE improves.
-"""
 
 import torch
 import torch.nn as nn

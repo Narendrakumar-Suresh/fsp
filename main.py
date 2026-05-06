@@ -1,30 +1,4 @@
-"""
-run_faers.py — FPS Pipeline with FAERS Data
-============================================
-Drop-in replacement for run.py that uses real FAERS quarterly data
-instead of the synthetic generator.
 
-FAERS data setup:
-  1. Download from: https://fis.fda.gov/extensions/FPD-QDE-FAERS/FPD-QDE-FAERS.html
-  2. Unzip each quarter into separate folders, e.g.:
-       faers_data/2024q1/
-       faers_data/2024q2/
-       faers_data/2024q3/
-  3. Each folder must contain the ascii/ subfolder with DEMO*.txt, DRUG*.txt, REAC*.txt
-
-  If FAERS folders are not found, the pipeline automatically falls back
-  to the synthetic FAERS-compatible generator so you can still test it.
-
-Usage:
-  # With real FAERS data:
-  python run_faers.py --faers-dirs faers_data/2024q1 faers_data/2024q2 faers_data/2024q3
-
-  # With synthetic fallback (no download needed):
-  python run_faers.py --synthetic
-
-  # Auto-detect (tries real data first, falls back to synthetic):
-  python run_faers.py
-"""
 
 import argparse
 import warnings

@@ -1,22 +1,4 @@
-"""
-fl_client.py — Federated Learning simulation (FedProx)
-=======================================================
-Custom in-process FedProx loop — no deprecated Flower API needed.
 
-Why not flwr.simulation.start_simulation()?
-  That API is deprecated in Flower >= 1.8. The replacement requires a
-  CLI-driven project structure that doesn't fit an in-process pipeline.
-  A manual FedProx loop gives direct weight access for Step 7 attribution
-  and avoids the deprecation warning entirely.
-
-FedProx objective (Li et al. 2020):
-  min_w  F_k(w)  +  (mu/2) * ||w - w_global||^2
-  mu=0 -> plain FedAvg, mu>0 -> stabilises non-IID divergence
-
-Class-imbalance fix:
-  ADR rate ~45% — using weighted BCE so the model doesn't collapse to
-  predicting all-negative during FL aggregation (root cause of AUROC < 0.5).
-"""
 
 import copy
 import numpy as np

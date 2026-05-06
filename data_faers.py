@@ -1,26 +1,4 @@
-"""
-data_faers.py — FDA Adverse Event Reporting System (FAERS) data loader
-FAERS is publicly available at: https://fis.fda.gov/extensions/FPD-QDE-FAERS/FPD-QDE-FAERS.html
 
-Directory structure expected (after unzipping a quarterly download):
-  faers_data/
-    ascii/
-      DEMO24Q1.txt   — patient demographics
-      DRUG24Q1.txt   — drug records
-      REAC24Q1.txt   — adverse reactions
-      OUTC24Q1.txt   — outcomes
-      THER24Q1.txt   — therapy dates (optional)
-
-Each row in DRUG maps to a case via primaryid.
-One case can have many drugs (polypharmacy) and many reactions.
-
-This module:
-  1. Loads and joins the four core tables
-  2. Normalizes drug names (FDA preferred names)
-  3. Filters to chronic polypharmacy cases (5+ drugs)
-  4. Outputs a DataFrame compatible with the rest of the FPS pipeline
-  5. Includes a fallback synthetic-FAERS generator for development/testing
-"""
 
 import os
 import re
